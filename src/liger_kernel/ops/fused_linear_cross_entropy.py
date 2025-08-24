@@ -161,12 +161,31 @@ def fused_linear_cross_entropy_forward(
         grad_input[start_idx:end_idx] = grad_logits_chunk @ weight
 
         if grad_weight is not None:
-            grad_weight += torch.mm(grad_logits_chunk.t(), _input_chunk).float()
+            if accum_dtype is None:
+                torch.addmm(
+                    input=grad_weight,
+                    mat1=grad_logits_chunk.t().to(_input_chunk.dtype),
+                    mat2=_input_chunk,
+                    out=grad_weight,
+                    alpha=1.0,
+                    beta=1.0,
+                )
+            else:
+                mat1 = grad_logits_chunk.t().to(accum_dtype)
+                mat2 = _input_chunk.to(accum_dtype)
+                torch.addmm(
+                    input=grad_weight,
+                    mat1=mat1,
+                    mat2=mat2,
+                    out=grad_weight,
+                    alpha=1.0,
+                    beta=1.0,
+                )
 
         if bias is not None:
             torch.add(
                 input=grad_bias,
-                other=grad_logits_chunk.sum(dim=0),
+                other=grad_logits_chunk.sum(dim=0).to(grad_bias.dtype),
                 out=grad_bias,
                 alpha=1.0,
             )
